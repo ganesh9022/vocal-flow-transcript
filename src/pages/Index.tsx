@@ -1,8 +1,10 @@
+
 import { useState, useRef, useEffect } from 'react';
-import { Mic, MicOff, Copy, Trash2, Sparkles, Radio, Bot, User, MessageCircle, Play, Square } from 'lucide-react';
+import { Mic, MicOff, Copy, Trash2, Volume2, Sparkles, Radio, Bot, User, MessageCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
 
@@ -14,7 +16,6 @@ interface Message {
 }
 
 const Index = () => {
-  const [isConversationActive, setIsConversationActive] = useState(false);
   const [isListening, setIsListening] = useState(false);
   const [currentTranscript, setCurrentTranscript] = useState('');
   const [messages, setMessages] = useState<Message[]>([]);
@@ -65,13 +66,11 @@ const Index = () => {
       utterance.onend = () => {
         setIsAiSpeaking(false);
         // Automatically start listening again after AI finishes speaking
-        if (isConversationActive) {
-          setTimeout(() => {
-            if (hasRecognitionSupport && !isListening) {
-              startListening();
-            }
-          }, 500);
-        }
+        setTimeout(() => {
+          if (hasRecognitionSupport && !isListening) {
+            startListening();
+          }
+        }, 500);
       };
       
       speechSynthesis.speak(utterance);
@@ -86,12 +85,10 @@ const Index = () => {
       timestamp: new Date(),
     };
     setMessages(prev => [...prev, newMessage]);
-    console.log('Added message:', newMessage);
     return newMessage;
   };
 
   const handleUserSpeechComplete = (transcript: string) => {
-    console.log('Processing speech:', transcript);
     if (transcript.trim()) {
       // Add user message
       addMessage(transcript, 'user');
@@ -106,7 +103,6 @@ const Index = () => {
   };
 
   useEffect(() => {
-    console.log('Setting up speech recognition...');
     speechSynthesisRef.current = window.speechSynthesis;
     
     if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
@@ -119,7 +115,6 @@ const Index = () => {
       recognitionRef.current.lang = selectedLanguage;
 
       recognitionRef.current.onresult = (event: any) => {
-        console.log('Speech recognition result:', event);
         let finalTranscript = '';
         let interimTranscript = '';
 
@@ -133,7 +128,6 @@ const Index = () => {
         }
 
         if (finalTranscript) {
-          console.log('Final transcript:', finalTranscript);
           setCurrentTranscript(finalTranscript);
           
           // Clear existing timer
@@ -141,18 +135,16 @@ const Index = () => {
             clearTimeout(silenceTimer);
           }
           
-          // Set new timer for 5 seconds of silence
+          // Set new timer for 3 seconds of silence
           const timer = setTimeout(() => {
-            console.log('5 seconds of silence, processing speech...');
             handleUserSpeechComplete(finalTranscript);
             setCurrentTranscript('');
             stopListening();
-          }, 5000);
+          }, 3000);
           
           setSilenceTimer(timer);
         } else {
           setCurrentTranscript(interimTranscript);
-          console.log('Interim transcript:', interimTranscript);
         }
       };
 
@@ -161,26 +153,18 @@ const Index = () => {
         setIsListening(false);
         toast({
           title: "Recognition Error",
-          description: `Voice recognition failed: ${event.error}`,
+          description: `Speech recognition failed: ${event.error}`,
           variant: "destructive"
         });
       };
 
-      recognitionRef.current.onstart = () => {
-        console.log('Speech recognition started');
-        setIsListening(true);
-      };
-
       recognitionRef.current.onend = () => {
-        console.log('Speech recognition ended');
         setIsListening(false);
         if (silenceTimer) {
           clearTimeout(silenceTimer);
           setSilenceTimer(null);
         }
       };
-    } else {
-      console.log('Speech recognition not supported');
     }
 
     return () => {
@@ -190,53 +174,18 @@ const Index = () => {
     };
   }, [selectedLanguage, toast, silenceTimer]);
 
-  const startConversation = () => {
-    console.log('Starting conversation...');
-    setIsConversationActive(true);
-    if (recognitionRef.current && hasRecognitionSupport) {
-      startListening();
+  const startListening = () => {
+    if (recognitionRef.current && hasRecognitionSupport && !isAiSpeaking) {
+      recognitionRef.current.start();
+      setIsListening(true);
       toast({
-        title: "Conversation Started",
-        description: "Speak naturally - AI will respond after 5 seconds of silence."
+        title: "Listening Started",
+        description: "Start speaking... I'll respond after 3 seconds of silence."
       });
     }
   };
 
-  const stopConversation = () => {
-    console.log('Stopping conversation...');
-    setIsConversationActive(false);
-    if (recognitionRef.current) {
-      recognitionRef.current.stop();
-      setIsListening(false);
-      if (silenceTimer) {
-        clearTimeout(silenceTimer);
-        setSilenceTimer(null);
-      }
-    }
-    if (speechSynthesis.speaking) {
-      speechSynthesis.cancel();
-      setIsAiSpeaking(false);
-    }
-    toast({
-      title: "Conversation Ended",
-      description: "Voice AI conversation has been stopped."
-    });
-  };
-
-  const startListening = () => {
-    console.log('Starting to listen...');
-    if (recognitionRef.current && hasRecognitionSupport && !isAiSpeaking && isConversationActive) {
-      try {
-        recognitionRef.current.start();
-        console.log('Recognition started successfully');
-      } catch (error) {
-        console.error('Error starting recognition:', error);
-      }
-    }
-  };
-
   const stopListening = () => {
-    console.log('Stopping listening...');
     if (recognitionRef.current) {
       recognitionRef.current.stop();
       setIsListening(false);
@@ -244,6 +193,10 @@ const Index = () => {
         clearTimeout(silenceTimer);
         setSilenceTimer(null);
       }
+      toast({
+        title: "Listening Stopped",
+        description: "Conversation paused."
+      });
     }
   };
 
@@ -297,30 +250,30 @@ const Index = () => {
         <div className="text-center space-y-6 mb-12">
           <div className="flex items-center justify-center space-x-3 mb-6">
             <div className="relative">
-              <Bot className="h-12 w-12 text-purple-600" />
+              <MessageCircle className="h-12 w-12 text-purple-600" />
               <Sparkles className="h-6 w-6 text-yellow-400 absolute -top-1 -right-1 animate-pulse" />
             </div>
             <h1 className="text-5xl font-bold bg-gradient-to-r from-purple-600 via-blue-600 to-cyan-600 bg-clip-text text-transparent">
-              VoiceChat AI
+              AI Conversation Hub
             </h1>
           </div>
           
           <p className="text-xl text-gray-600 max-w-3xl mx-auto leading-relaxed">
-            Have natural <span className="font-semibold text-purple-600">voice conversations</span> with AI. 
-            Speak naturally and get intelligent voice responses in real-time.
+            Experience natural <span className="font-semibold text-purple-600">two-way conversations</span> with AI. 
+            Speak naturally and get intelligent responses in real-time.
           </p>
           
           <div className="flex flex-wrap justify-center gap-3 mt-6">
             <Badge variant="secondary" className="px-4 py-2 text-sm bg-purple-100 text-purple-700 border-purple-200">
               <Bot className="w-4 h-4 mr-2" />
-              Voice AI Assistant
+              AI-powered responses
             </Badge>
             <Badge variant="secondary" className="px-4 py-2 text-sm bg-blue-100 text-blue-700 border-blue-200">
               <Radio className="w-4 h-4 mr-2" />
-              Real-time conversation
+              Live conversation
             </Badge>
             <Badge variant="secondary" className="px-4 py-2 text-sm bg-cyan-100 text-cyan-700 border-cyan-200">
-              ⏱️ 5-second auto-response
+              ⏱️ 3-second auto-response
             </Badge>
           </div>
         </div>
@@ -354,37 +307,44 @@ const Index = () => {
               </Select>
             </div>
 
-            {/* Voice AI Control Section */}
+            {/* Microphone Section */}
             <div className="flex flex-col items-center space-y-6">
               {hasRecognitionSupport ? (
                 <div className="relative">
-                  {/* Animated rings for conversation state */}
+                  {/* Animated rings for listening state */}
                   {(isListening || isAiSpeaking) && (
                     <>
                       <div className={`absolute inset-0 rounded-full animate-ping ${
-                        isAiSpeaking ? 'bg-blue-400/30' : 'bg-green-400/30'
+                        isAiSpeaking ? 'bg-blue-400/30' : 'bg-red-400/30'
                       }`}></div>
                       <div className={`absolute inset-0 rounded-full animate-ping animation-delay-75 ${
-                        isAiSpeaking ? 'bg-blue-400/20' : 'bg-green-400/20'
+                        isAiSpeaking ? 'bg-blue-400/20' : 'bg-red-400/20'
+                      }`}></div>
+                      <div className={`absolute inset-0 rounded-full animate-ping animation-delay-150 ${
+                        isAiSpeaking ? 'bg-blue-400/10' : 'bg-red-400/10'
                       }`}></div>
                     </>
                   )}
                   
-                  {!isConversationActive ? (
-                    <Button
-                      onClick={startConversation}
-                      className="h-24 w-24 rounded-full transition-all duration-300 shadow-2xl hover:shadow-3xl transform hover:scale-105 bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600"
-                    >
-                      <Play className="h-10 w-10 text-white" />
-                    </Button>
-                  ) : (
-                    <Button
-                      onClick={stopConversation}
-                      className="h-24 w-24 rounded-full transition-all duration-300 shadow-2xl hover:shadow-3xl transform hover:scale-105 bg-gradient-to-r from-red-500 to-pink-500 hover:from-red-600 hover:to-pink-600"
-                    >
-                      <Square className="h-10 w-10 text-white" />
-                    </Button>
-                  )}
+                  <Button
+                    onClick={isListening ? stopListening : startListening}
+                    disabled={isAiSpeaking}
+                    className={`h-24 w-24 rounded-full transition-all duration-300 shadow-2xl hover:shadow-3xl transform hover:scale-105 ${
+                      isAiSpeaking
+                        ? 'bg-gradient-to-r from-blue-500 to-indigo-500 cursor-not-allowed'
+                        : isListening 
+                          ? 'bg-gradient-to-r from-red-500 to-pink-500 hover:from-red-600 hover:to-pink-600' 
+                          : 'bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700'
+                    }`}
+                  >
+                    {isAiSpeaking ? (
+                      <Bot className="h-10 w-10 text-white animate-pulse" />
+                    ) : isListening ? (
+                      <MicOff className="h-10 w-10 text-white animate-pulse" />
+                    ) : (
+                      <Mic className="h-10 w-10 text-white" />
+                    )}
+                  </Button>
                 </div>
               ) : (
                 <div className="text-center space-y-4">
@@ -395,7 +355,7 @@ const Index = () => {
                   </div>
                   <div className="bg-red-50 border border-red-200 rounded-xl p-4">
                     <p className="text-red-700 font-medium">
-                      🚫 Voice recognition not supported in this browser
+                      🚫 Speech recognition not supported in this browser
                     </p>
                     <p className="text-red-600 text-sm mt-1">
                       Please use Chrome, Edge, or Safari for full functionality
@@ -409,28 +369,22 @@ const Index = () => {
                 isAiSpeaking
                   ? 'bg-gradient-to-r from-blue-100 to-indigo-100 text-blue-800 shadow-lg'
                   : isListening 
-                    ? 'bg-gradient-to-r from-green-100 to-emerald-100 text-green-800 shadow-lg' 
-                    : isConversationActive
-                      ? 'bg-gradient-to-r from-yellow-100 to-orange-100 text-yellow-800 shadow-sm'
-                      : 'bg-gradient-to-r from-gray-100 to-gray-200 text-gray-600 shadow-sm'
+                    ? 'bg-gradient-to-r from-red-100 to-pink-100 text-red-800 shadow-lg' 
+                    : 'bg-gradient-to-r from-gray-100 to-gray-200 text-gray-600 shadow-sm'
               }`}>
                 <div className={`w-3 h-3 rounded-full ${
                   isAiSpeaking 
                     ? 'bg-blue-500 animate-pulse shadow-blue-500/50 shadow-lg'
                     : isListening 
-                      ? 'bg-green-500 animate-pulse shadow-green-500/50 shadow-lg' 
-                      : isConversationActive
-                        ? 'bg-yellow-500 animate-pulse shadow-yellow-500/50 shadow-lg'
-                        : 'bg-gray-400'
+                      ? 'bg-red-500 animate-pulse shadow-red-500/50 shadow-lg' 
+                      : 'bg-gray-400'
                 }`} />
                 <span className="text-base">
                   {isAiSpeaking 
                     ? '🤖 AI is speaking...' 
                     : isListening 
-                      ? '🎤 Listening... (speak naturally)' 
-                      : isConversationActive
-                        ? '⏸️ Conversation active - ready to listen'
-                        : '▶️ Click to start voice conversation'
+                      ? '🎤 Listening... (3s auto-response)' 
+                      : '⏸️ Ready for conversation'
                   }
                 </span>
               </div>
@@ -438,7 +392,7 @@ const Index = () => {
               {/* Current transcript */}
               {currentTranscript && (
                 <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-4 max-w-2xl">
-                  <p className="text-yellow-800 font-medium text-sm mb-1">You're saying:</p>
+                  <p className="text-yellow-800 font-medium text-sm mb-1">Current speech:</p>
                   <p className="text-gray-700">{currentTranscript}</p>
                 </div>
               )}
@@ -453,7 +407,7 @@ const Index = () => {
             <div className="flex items-center justify-between">
               <div className="flex items-center space-x-3">
                 <div className="w-2 h-8 bg-gradient-to-b from-blue-500 to-purple-500 rounded-full"></div>
-                <h2 className="text-2xl font-bold text-gray-900">Voice Conversation</h2>
+                <h2 className="text-2xl font-bold text-gray-900">Live Conversation</h2>
               </div>
               <div className="flex space-x-3">
                 <Button
@@ -483,9 +437,9 @@ const Index = () => {
             <div className="min-h-[300px] max-h-[500px] overflow-y-auto space-y-4 bg-white/60 backdrop-blur-sm rounded-2xl p-6 border border-gray-100">
               {messages.length === 0 ? (
                 <div className="text-center text-gray-500 py-12">
-                  <Bot className="h-16 w-16 mx-auto mb-4 text-gray-300" />
-                  <p className="text-lg font-medium mb-2">Start your voice conversation</p>
-                  <p className="text-sm">Click "Start Conversation" and begin speaking with AI</p>
+                  <MessageCircle className="h-16 w-16 mx-auto mb-4 text-gray-300" />
+                  <p className="text-lg font-medium mb-2">Start your conversation</p>
+                  <p className="text-sm">Click the microphone button and begin speaking with AI</p>
                 </div>
               ) : (
                 messages.map((message) => (
@@ -556,7 +510,7 @@ const Index = () => {
           <div className="flex items-center justify-center space-x-2 text-gray-600">
             <Sparkles className="h-5 w-5 text-purple-500" />
             <p className="text-lg font-medium">
-              VoiceChat AI - Natural Voice Communication with AI
+              AI Conversation Hub - Natural Two-Way Communication
             </p>
             <Sparkles className="h-5 w-5 text-blue-500" />
           </div>
