@@ -1,4 +1,3 @@
-
 import { useState, useRef, useEffect } from 'react';
 import { Mic, MicOff, Copy, Trash2, Sparkles, Radio, Bot, User, MessageCircle, Play, Square } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -87,10 +86,12 @@ const Index = () => {
       timestamp: new Date(),
     };
     setMessages(prev => [...prev, newMessage]);
+    console.log('Added message:', newMessage);
     return newMessage;
   };
 
   const handleUserSpeechComplete = (transcript: string) => {
+    console.log('Processing speech:', transcript);
     if (transcript.trim()) {
       // Add user message
       addMessage(transcript, 'user');
@@ -105,6 +106,7 @@ const Index = () => {
   };
 
   useEffect(() => {
+    console.log('Setting up speech recognition...');
     speechSynthesisRef.current = window.speechSynthesis;
     
     if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
@@ -117,6 +119,7 @@ const Index = () => {
       recognitionRef.current.lang = selectedLanguage;
 
       recognitionRef.current.onresult = (event: any) => {
+        console.log('Speech recognition result:', event);
         let finalTranscript = '';
         let interimTranscript = '';
 
@@ -130,6 +133,7 @@ const Index = () => {
         }
 
         if (finalTranscript) {
+          console.log('Final transcript:', finalTranscript);
           setCurrentTranscript(finalTranscript);
           
           // Clear existing timer
@@ -139,6 +143,7 @@ const Index = () => {
           
           // Set new timer for 5 seconds of silence
           const timer = setTimeout(() => {
+            console.log('5 seconds of silence, processing speech...');
             handleUserSpeechComplete(finalTranscript);
             setCurrentTranscript('');
             stopListening();
@@ -147,6 +152,7 @@ const Index = () => {
           setSilenceTimer(timer);
         } else {
           setCurrentTranscript(interimTranscript);
+          console.log('Interim transcript:', interimTranscript);
         }
       };
 
@@ -160,13 +166,21 @@ const Index = () => {
         });
       };
 
+      recognitionRef.current.onstart = () => {
+        console.log('Speech recognition started');
+        setIsListening(true);
+      };
+
       recognitionRef.current.onend = () => {
+        console.log('Speech recognition ended');
         setIsListening(false);
         if (silenceTimer) {
           clearTimeout(silenceTimer);
           setSilenceTimer(null);
         }
       };
+    } else {
+      console.log('Speech recognition not supported');
     }
 
     return () => {
@@ -177,6 +191,7 @@ const Index = () => {
   }, [selectedLanguage, toast, silenceTimer]);
 
   const startConversation = () => {
+    console.log('Starting conversation...');
     setIsConversationActive(true);
     if (recognitionRef.current && hasRecognitionSupport) {
       startListening();
@@ -188,6 +203,7 @@ const Index = () => {
   };
 
   const stopConversation = () => {
+    console.log('Stopping conversation...');
     setIsConversationActive(false);
     if (recognitionRef.current) {
       recognitionRef.current.stop();
@@ -208,13 +224,19 @@ const Index = () => {
   };
 
   const startListening = () => {
+    console.log('Starting to listen...');
     if (recognitionRef.current && hasRecognitionSupport && !isAiSpeaking && isConversationActive) {
-      recognitionRef.current.start();
-      setIsListening(true);
+      try {
+        recognitionRef.current.start();
+        console.log('Recognition started successfully');
+      } catch (error) {
+        console.error('Error starting recognition:', error);
+      }
     }
   };
 
   const stopListening = () => {
+    console.log('Stopping listening...');
     if (recognitionRef.current) {
       recognitionRef.current.stop();
       setIsListening(false);
