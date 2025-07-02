@@ -1,11 +1,5 @@
-
 import { useState, useRef, useEffect } from 'react';
-import { Mic, MicOff, Copy, Trash2, Volume2, Sparkles, Radio, Bot, User, MessageCircle } from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import { Card } from '@/components/ui/card';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Textarea } from '@/components/ui/textarea';
-import { Badge } from '@/components/ui/badge';
+import { Mic, MicOff, Copy, Trash2, Volume2, Sparkles, Radio, Bot, User, MessageCircle, Loader2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 
 interface Message {
@@ -22,6 +16,7 @@ const Index = () => {
   const [selectedLanguage, setSelectedLanguage] = useState('en-US');
   const [hasRecognitionSupport, setHasRecognitionSupport] = useState(false);
   const [isAiSpeaking, setIsAiSpeaking] = useState(false);
+  const [isProcessingRequest, setIsProcessingRequest] = useState(false);
   const [silenceTimer, setSilenceTimer] = useState<NodeJS.Timeout | null>(null);
   const recognitionRef = useRef<any>(null);
   const speechSynthesisRef = useRef<SpeechSynthesis | null>(null);
@@ -40,23 +35,34 @@ const Index = () => {
     { code: 'pt-BR', name: 'Portuguese (Brazil)', flag: '🇧🇷' }
   ];
 
-  // Mock AI response generator
-  const generateAiResponse = (userMessage: string): string => {
-    const responses = [
-      "That's an interesting point. Can you tell me more about that?",
-      "I understand what you're saying. What would you like to explore further?",
-      "Thank you for sharing that with me. How does that make you feel?",
-      "That sounds important to you. Can you elaborate on that?",
-      "I see. What are your thoughts on how to move forward with this?",
-      "That's a great observation. What led you to that conclusion?",
-      "I appreciate you sharing that. What's the most important aspect of this for you?",
-      "Interesting perspective. How long have you been thinking about this?",
-    ];
-    return responses[Math.floor(Math.random() * responses.length)];
+  const callBackendAPI = async (userMessage: string): Promise<string> => {
+    try {
+      const response = await fetch('http://127.0.0.1:8000/generate', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          input_text: userMessage
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const data = await response.json();
+      return data.output_text;
+    } catch (error) {
+      console.error('Backend API Error:', error);
+      throw new Error('Failed to get response from AI backend');
+    }
   };
+
 
   const speakText = (text: string) => {
     if ('speechSynthesis' in window) {
+      speechSynthesis.cancel();      
       setIsAiSpeaking(true);
       const utterance = new SpeechSynthesisUtterance(text);
       utterance.rate = 0.9;
@@ -71,6 +77,10 @@ const Index = () => {
             startListening();
           }
         }, 500);
+      };
+      
+      utterance.onerror = () => {
+        setIsAiSpeaking(false);
       };
       
       speechSynthesis.speak(utterance);
@@ -88,17 +98,32 @@ const Index = () => {
     return newMessage;
   };
 
-  const handleUserSpeechComplete = (transcript: string) => {
+  const handleUserSpeechComplete = async (transcript: string) => {
     if (transcript.trim()) {
       // Add user message
       addMessage(transcript, 'user');
       
-      // Generate and add AI response
-      setTimeout(() => {
-        const aiResponse = generateAiResponse(transcript);
+      // Set loading state
+      setIsProcessingRequest(true);
+      
+      try {
+        // Call backend API
+        const aiResponse = await callBackendAPI(transcript);
+        
+        // Add AI response
         addMessage(aiResponse, 'ai');
+        
+        // Speak the AI response
         speakText(aiResponse);
-      }, 500);
+        
+      } catch (error) {
+        console.error('Error getting AI response:', error);
+        const errorMessage = "Sorry, I'm having trouble connecting to the AI service. Please try again.";
+        addMessage(errorMessage, 'ai');
+        speakText(errorMessage);
+      } finally {
+        setIsProcessingRequest(false);
+      }
     }
   };
 
@@ -172,10 +197,10 @@ const Index = () => {
         clearTimeout(silenceTimer);
       }
     };
-  }, [selectedLanguage, toast, silenceTimer]);
+  }, [selectedLanguage, silenceTimer]);
 
   const startListening = () => {
-    if (recognitionRef.current && hasRecognitionSupport && !isAiSpeaking) {
+    if (recognitionRef.current && hasRecognitionSupport && !isAiSpeaking && !isProcessingRequest) {
       recognitionRef.current.start();
       setIsListening(true);
       toast({
@@ -223,6 +248,11 @@ const Index = () => {
   const clearConversation = () => {
     setMessages([]);
     setCurrentTranscript('');
+    // Stop any ongoing speech
+    if (speechSynthesis.speaking) {
+      speechSynthesis.cancel();
+      setIsAiSpeaking(false);
+    }
     toast({
       title: "Cleared",
       description: "Conversation has been cleared."
@@ -260,26 +290,26 @@ const Index = () => {
           
           <p className="text-xl text-gray-600 max-w-3xl mx-auto leading-relaxed">
             Experience natural <span className="font-semibold text-purple-600">two-way conversations</span> with AI. 
-            Speak naturally and get intelligent responses in real-time.
+            Speak naturally and get intelligent responses powered by LLaMA 3.2.
           </p>
           
           <div className="flex flex-wrap justify-center gap-3 mt-6">
-            <Badge variant="secondary" className="px-4 py-2 text-sm bg-purple-100 text-purple-700 border-purple-200">
+            <div className="px-4 py-2 text-sm bg-purple-100 text-purple-700 border border-purple-200 rounded-full flex items-center">
               <Bot className="w-4 h-4 mr-2" />
-              AI-powered responses
-            </Badge>
-            <Badge variant="secondary" className="px-4 py-2 text-sm bg-blue-100 text-blue-700 border-blue-200">
+              LLaMA 3.2 90B powered
+            </div>
+            <div className="px-4 py-2 text-sm bg-blue-100 text-blue-700 border border-blue-200 rounded-full flex items-center">
               <Radio className="w-4 h-4 mr-2" />
               Live conversation
-            </Badge>
-            <Badge variant="secondary" className="px-4 py-2 text-sm bg-cyan-100 text-cyan-700 border-cyan-200">
+            </div>
+            <div className="px-4 py-2 text-sm bg-cyan-100 text-cyan-700 border border-cyan-200 rounded-full">
               ⏱️ 3-second auto-response
-            </Badge>
+            </div>
           </div>
         </div>
 
         {/* Main Control Panel */}
-        <Card className="p-8 mb-8 shadow-2xl border-0 bg-white/80 backdrop-blur-xl rounded-3xl relative overflow-hidden">
+        <div className="p-8 mb-8 shadow-2xl border-0 bg-white/80 backdrop-blur-xl rounded-3xl relative overflow-hidden">
           <div className="absolute inset-0 bg-gradient-to-r from-purple-500/5 via-blue-500/5 to-cyan-500/5"></div>
           <div className="relative z-10 space-y-8">
             {/* Language Selector */}
@@ -290,68 +320,71 @@ const Index = () => {
                   Conversation Language
                 </label>
               </div>
-              <Select value={selectedLanguage} onValueChange={handleLanguageChange}>
-                <SelectTrigger className="w-full lg:w-80 h-12 bg-white/80 border-gray-200 rounded-xl shadow-sm hover:shadow-md transition-all duration-200">
-                  <SelectValue placeholder="Choose your language" />
-                </SelectTrigger>
-                <SelectContent className="bg-white/95 backdrop-blur-sm border-gray-200 rounded-xl shadow-xl">
-                  {languages.map((lang) => (
-                    <SelectItem key={lang.code} value={lang.code} className="hover:bg-purple-50">
-                      <div className="flex items-center space-x-3">
-                        <span className="text-lg">{lang.flag}</span>
-                        <span>{lang.name}</span>
-                      </div>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <select 
+                value={selectedLanguage} 
+                onChange={(e) => handleLanguageChange(e.target.value)}
+                className="w-full lg:w-80 h-12 bg-white/80 border border-gray-200 rounded-xl shadow-sm hover:shadow-md transition-all duration-200 px-4"
+              >
+                {languages.map((lang) => (
+                  <option key={lang.code} value={lang.code}>
+                    {lang.flag} {lang.name}
+                  </option>
+                ))}
+              </select>
             </div>
 
             {/* Microphone Section */}
             <div className="flex flex-col items-center space-y-6">
               {hasRecognitionSupport ? (
                 <div className="relative">
-                  {/* Animated rings for listening state */}
-                  {(isListening || isAiSpeaking) && (
+                  {/* Animated rings for listening/processing state */}
+                  {(isListening || isAiSpeaking || isProcessingRequest) && (
                     <>
                       <div className={`absolute inset-0 rounded-full animate-ping ${
+                        isProcessingRequest ? 'bg-yellow-400/30' :
                         isAiSpeaking ? 'bg-blue-400/30' : 'bg-red-400/30'
                       }`}></div>
                       <div className={`absolute inset-0 rounded-full animate-ping animation-delay-75 ${
+                        isProcessingRequest ? 'bg-yellow-400/20' :
                         isAiSpeaking ? 'bg-blue-400/20' : 'bg-red-400/20'
                       }`}></div>
                       <div className={`absolute inset-0 rounded-full animate-ping animation-delay-150 ${
+                        isProcessingRequest ? 'bg-yellow-400/10' :
                         isAiSpeaking ? 'bg-blue-400/10' : 'bg-red-400/10'
                       }`}></div>
                     </>
                   )}
                   
-                  <Button
+                  <button
                     onClick={isListening ? stopListening : startListening}
-                    disabled={isAiSpeaking}
-                    className={`h-24 w-24 rounded-full transition-all duration-300 shadow-2xl hover:shadow-3xl transform hover:scale-105 ${
-                      isAiSpeaking
-                        ? 'bg-gradient-to-r from-blue-500 to-indigo-500 cursor-not-allowed'
-                        : isListening 
-                          ? 'bg-gradient-to-r from-red-500 to-pink-500 hover:from-red-600 hover:to-pink-600' 
-                          : 'bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700'
+                    disabled={isAiSpeaking || isProcessingRequest}
+                    className={`h-24 w-24 rounded-full transition-all duration-300 shadow-2xl hover:shadow-3xl transform hover:scale-105 flex items-center justify-center ${
+                      isProcessingRequest
+                        ? 'bg-gradient-to-r from-yellow-500 to-orange-500 cursor-not-allowed'
+                        : isAiSpeaking
+                          ? 'bg-gradient-to-r from-blue-500 to-indigo-500 cursor-not-allowed'
+                          : isListening 
+                            ? 'bg-gradient-to-r from-red-500 to-pink-500 hover:from-red-600 hover:to-pink-600' 
+                            : 'bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700'
                     }`}
                   >
-                    {isAiSpeaking ? (
+                    {isProcessingRequest ? (
+                      <Loader2 className="h-10 w-10 text-white animate-spin" />
+                    ) : isAiSpeaking ? (
                       <Bot className="h-10 w-10 text-white animate-pulse" />
                     ) : isListening ? (
                       <MicOff className="h-10 w-10 text-white animate-pulse" />
                     ) : (
                       <Mic className="h-10 w-10 text-white" />
                     )}
-                  </Button>
+                  </button>
                 </div>
               ) : (
                 <div className="text-center space-y-4">
                   <div className="relative">
-                    <Button disabled className="h-24 w-24 rounded-full bg-gray-300 shadow-lg">
+                    <button disabled className="h-24 w-24 rounded-full bg-gray-300 shadow-lg flex items-center justify-center">
                       <MicOff className="h-10 w-10 text-gray-500" />
-                    </Button>
+                    </button>
                   </div>
                   <div className="bg-red-50 border border-red-200 rounded-xl p-4">
                     <p className="text-red-700 font-medium">
@@ -366,25 +399,31 @@ const Index = () => {
 
               {/* Status Indicator */}
               <div className={`flex items-center space-x-3 px-6 py-3 rounded-full text-sm font-medium transition-all duration-300 ${
-                isAiSpeaking
-                  ? 'bg-gradient-to-r from-blue-100 to-indigo-100 text-blue-800 shadow-lg'
-                  : isListening 
-                    ? 'bg-gradient-to-r from-red-100 to-pink-100 text-red-800 shadow-lg' 
-                    : 'bg-gradient-to-r from-gray-100 to-gray-200 text-gray-600 shadow-sm'
+                isProcessingRequest
+                  ? 'bg-gradient-to-r from-yellow-100 to-orange-100 text-yellow-800 shadow-lg'
+                  : isAiSpeaking
+                    ? 'bg-gradient-to-r from-blue-100 to-indigo-100 text-blue-800 shadow-lg'
+                    : isListening 
+                      ? 'bg-gradient-to-r from-red-100 to-pink-100 text-red-800 shadow-lg' 
+                      : 'bg-gradient-to-r from-gray-100 to-gray-200 text-gray-600 shadow-sm'
               }`}>
                 <div className={`w-3 h-3 rounded-full ${
-                  isAiSpeaking 
-                    ? 'bg-blue-500 animate-pulse shadow-blue-500/50 shadow-lg'
-                    : isListening 
-                      ? 'bg-red-500 animate-pulse shadow-red-500/50 shadow-lg' 
-                      : 'bg-gray-400'
+                  isProcessingRequest
+                    ? 'bg-yellow-500 animate-pulse shadow-yellow-500/50 shadow-lg'
+                    : isAiSpeaking 
+                      ? 'bg-blue-500 animate-pulse shadow-blue-500/50 shadow-lg'
+                      : isListening 
+                        ? 'bg-red-500 animate-pulse shadow-red-500/50 shadow-lg' 
+                        : 'bg-gray-400'
                 }`} />
                 <span className="text-base">
-                  {isAiSpeaking 
-                    ? '🤖 AI is speaking...' 
-                    : isListening 
-                      ? '🎤 Listening... (3s auto-response)' 
-                      : '⏸️ Ready for conversation'
+                  {isProcessingRequest
+                    ? '⚡ Processing with AI...'
+                    : isAiSpeaking 
+                      ? '🤖 AI is speaking...' 
+                      : isListening 
+                        ? '🎤 Listening... (3s auto-response)' 
+                        : '⏸️ Ready for conversation'
                   }
                 </span>
               </div>
@@ -398,10 +437,10 @@ const Index = () => {
               )}
             </div>
           </div>
-        </Card>
+        </div>
 
         {/* Conversation Area */}
-        <Card className="p-8 shadow-2xl border-0 bg-white/80 backdrop-blur-xl rounded-3xl relative overflow-hidden">
+        <div className="p-8 shadow-2xl border-0 bg-white/80 backdrop-blur-xl rounded-3xl relative overflow-hidden">
           <div className="absolute inset-0 bg-gradient-to-br from-blue-500/5 to-purple-500/5"></div>
           <div className="relative z-10 space-y-6">
             <div className="flex items-center justify-between">
@@ -410,26 +449,22 @@ const Index = () => {
                 <h2 className="text-2xl font-bold text-gray-900">Live Conversation</h2>
               </div>
               <div className="flex space-x-3">
-                <Button
+                <button
                   onClick={copyAllMessages}
-                  variant="outline"
-                  size="sm"
                   disabled={messages.length === 0}
-                  className="flex items-center space-x-2 bg-white/80 hover:bg-blue-50 border-blue-200 text-blue-700 hover:text-blue-800 rounded-xl px-4 py-2 transition-all duration-200"
+                  className="flex items-center space-x-2 bg-white/80 hover:bg-blue-50 border border-blue-200 text-blue-700 hover:text-blue-800 rounded-xl px-4 py-2 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   <Copy className="h-4 w-4" />
                   <span>Copy</span>
-                </Button>
-                <Button
+                </button>
+                <button
                   onClick={clearConversation}
-                  variant="outline"
-                  size="sm"
                   disabled={messages.length === 0}
-                  className="flex items-center space-x-2 bg-white/80 hover:bg-red-50 border-red-200 text-red-600 hover:text-red-700 rounded-xl px-4 py-2 transition-all duration-200"
+                  className="flex items-center space-x-2 bg-white/80 hover:bg-red-50 border border-red-200 text-red-600 hover:text-red-700 rounded-xl px-4 py-2 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   <Trash2 className="h-4 w-4" />
                   <span>Clear</span>
-                </Button>
+                </button>
               </div>
             </div>
 
@@ -440,6 +475,7 @@ const Index = () => {
                   <MessageCircle className="h-16 w-16 mx-auto mb-4 text-gray-300" />
                   <p className="text-lg font-medium mb-2">Start your conversation</p>
                   <p className="text-sm">Click the microphone button and begin speaking with AI</p>
+                  <p className="text-xs mt-2 text-gray-400">Powered by LLaMA 3.2 90B Vision Instruct</p>
                 </div>
               ) : (
                 messages.map((message) => (
@@ -503,19 +539,19 @@ const Index = () => {
               </div>
             )}
           </div>
-        </Card>
+        </div>
 
         {/* Footer */}
         <div className="text-center mt-12 space-y-4">
           <div className="flex items-center justify-center space-x-2 text-gray-600">
             <Sparkles className="h-5 w-5 text-purple-500" />
             <p className="text-lg font-medium">
-              AI Conversation Hub - Natural Two-Way Communication
+              AI Conversation Hub - Powered by LLaMA 3.2 90B
             </p>
             <Sparkles className="h-5 w-5 text-blue-500" />
           </div>
           <p className="text-gray-500">
-            Built with React, Vite, and TailwindCSS • 
+            Built with React & FastAPI • 
             {hasRecognitionSupport 
               ? ' ✅ Voice & Speech API supported' 
               : ' ⚠️ Limited browser support'
